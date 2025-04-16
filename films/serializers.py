@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from .models import Film, Director, Genre
-
+from rest_framework.exceptions import ValidationError
 
 class DirectorSerializer(serializers.ModelSerializer):
     class Meta:
@@ -28,7 +28,30 @@ class FilmSerializer(serializers.ModelSerializer):
     class Meta:
         model = Film
         #fields = ['id', 'name', 'kp_rating', 'created']
-        fields = 'id name kp_rating text director genres director_fio genre_names'.split()
+        fields = 'id name kp_rating text director genres director_fio genre_names reviews'.split()
+        depth = 1
 
     def get_director_fio(self, film):
         return film.director.fio if film.director_id else None
+
+class FilmValidateSerializer(serializers.Serializer):
+    name = serializers.CharField(required=True, min_length=4, max_length=255)
+    text = serializers.CharField(required=False, default='No text')
+    kp_rating = serializers.FloatField(min_value=1, max_value=10)
+    is_active = serializers.BooleanField(default=False)
+    director_id = serializers.IntegerField(min_value=1)
+    genres = serializers.ListField(child=serializers.IntegerField(min_value=1))
+
+    def validate_director_id(self, director_id):
+        try:
+            Director.objects.get(id=director_id)
+        except Director.DoesNotExist:
+            raise ValidationError('Director does not exist')
+        return director_id
+
+    def validate_genres(self, genres):
+        genres = list(set(genres))
+        genres_from_db = Genre.objects.filter(id__in=genres)
+        if len(genres_from_db) != len(genres):
+            raise ValidationError('Genres do not exist')
+        return genres
